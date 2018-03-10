@@ -252,7 +252,7 @@ while (1) {
 						print $lastuid_fh "$uid\n";
 						close $lastuid_fh;
 						if (defined $config{command}) {
-							open my $command, "|-", "$config{command} \"$date\" \"$uid\" \"$status\""
+							open my $command, "|-", $config{command}, $date, $uid, $status
 								or warn "Cannot execute `$config{command}'";
 							print $command $message;
 							close $command;
