@@ -143,6 +143,7 @@ if (open my $lastuid_fh, '<', "$dir/lastuid") {
 
 while (1) {
 	my ($lastid, $highestuid, $highestid);
+	$lastid = 0;
 	print "Checking for new messages...";
 	STDOUT->flush();
 	print $sock "$num UID FETCH " . ($lastuid != 0 ? "$lastuid," : "") . "* (UID)\r\n";
@@ -230,10 +231,11 @@ while (1) {
 							my $value = shift @fields;
 							if ($key eq "X-GM-LABELS") {
 								if (ref($value) eq "ARRAY") {
-									my @flags = grep { ref($_) ne "ARRAY" and $_ ne "\\\\Important" and $_ ne "\\\\Starred" } @{$value};
-									$status = (not grep { $_ eq "\\\\Sent" } @flags) ? "Received" : @flags == 1 ? "Sent" : "Sent+Received";
+									my $sent = grep { ref($_) ne "ARRAY" and $_ eq "\\Sent" } @{$value};
+									my $received = grep { ref($_) ne "ARRAY" and $_ eq "\\Inbox" } @{$value};
+									$status = ($sent and $received) ? "Sent+Received" : $sent ? "Sent" : "Received";
 								} else {
-									$status = ($value eq "\\\\Sent") ? "Sent" : "Received";
+									$status = ($value eq "\\Sent") ? "Sent" : "Received";
 								}
 							} elsif ($key eq "UID") {
 								$uid = $value if ref($value) ne "ARRAY";
