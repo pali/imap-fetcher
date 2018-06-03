@@ -233,9 +233,10 @@ while (1) {
 								if (ref($value) eq "ARRAY") {
 									my $sent = grep { ref($_) ne "ARRAY" and $_ eq "\\Sent" } @{$value};
 									my $received = grep { ref($_) ne "ARRAY" and $_ eq "\\Inbox" } @{$value};
-									$status = ($sent and $received) ? "Sent+Received" : $sent ? "Sent" : "Received";
+									my $draft = grep { ref($_) ne "ARRAY" and $_ eq "\\Draft" } @{$value};
+									$status = ($sent and $received) ? "Sent+Received" : $sent ? "Sent" : $draft ? "Draft" : "Received";
 								} else {
-									$status = ($value eq "\\Sent") ? "Sent" : "Received";
+									$status = ($value eq "\\Sent") ? "Sent" : ($value eq "\\Draft") ? "Draft" : "Received";
 								}
 							} elsif ($key eq "UID") {
 								$uid = $value if ref($value) ne "ARRAY";
