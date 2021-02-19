@@ -295,7 +295,7 @@ while (1) {
 IDLE:
 	print $sock "$num IDLE\r\n";
 	$done = 0;
-	alarm 60*15;
+	alarm 60*10;
 	while (<$sock>) {
 		$_ =~ s/\r?\n$//;
 		DEBUG and warn "DEBUG: $_\n";
