@@ -49,7 +49,11 @@ if ($config{ssl}) {
 			PeerHost => $config{server},
 			PeerPort => $config{port},
 		);
-	die "Cannot connect to server: $!, $SSL_ERROR\n" unless $sock;
+	if (not $sock) {
+		warn "Cannot connect to server: $!, $SSL_ERROR\n";
+		sleep 10;
+		goto LOGIN;
+	}
 	$sock->blocking(1);
 } else {
 	$sock = IO::Socket::INET->new(
@@ -57,7 +61,11 @@ if ($config{ssl}) {
 			PeerPort => $config{port},
 			Proto => 'tcp',
 		);
-	die "Cannot connect to server: $!\n" unless $sock;
+	if (not $sock) {
+		warn "Cannot connect to server: $!\n";
+		sleep 10;
+		goto LOGIN;
+	}
 }
 
 my $num = 1;
