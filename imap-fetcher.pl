@@ -266,8 +266,10 @@ while (1) {
 						if (defined $config{command}) {
 							open my $command, "|-", $config{command}, $date, $uid, $status
 								or warn "Cannot execute `$config{command}'";
-							print $command $message;
-							close $command;
+							if ($command) {
+								print $command $message;
+								close $command;
+							}
 						} else {
 							my @days = qw(Sun Mon Tue Wed Thu Fri Sat);
 							my @mons = qw(Jan Feb Mar Apr May Jun Jul Aug Sep Oct Nov Dec);
