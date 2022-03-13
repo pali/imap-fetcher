@@ -6,6 +6,7 @@ use warnings;
 use IO::Handle;
 use IO::Socket::INET;
 use IO::Socket::SSL;
+use Time::Piece;
 
 use constant DEBUG => 0;
 
@@ -267,6 +268,29 @@ while (1) {
 								or warn "Cannot execute `$config{command}'";
 							print $command $message;
 							close $command;
+						} else {
+							my @days = qw(Sun Mon Tue Wed Thu Fri Sat);
+							my @mons = qw(Jan Feb Mar Apr May Jun Jul Aug Sep Oct Nov Dec);
+							my $t = eval { Time::Piece->strptime($date, '%d-%b-%Y %H:%M:%S %z') } || scalar localtime;
+							my $mbox_date = "$days[$t->_wday] $mons[$t->_mon] " . $t->strftime('%d %H:%M:%S %Y');
+							my ($header) = ($message =~ /^(.*?)\r?\n\r?\n/s);
+							$header = "" unless defined $header;
+							$header =~ s/\r?\n(?=\s)//sg;
+							my ($sender) = ($header =~ /^Return-Path:\s*(.*?)\s*$/mi);
+							$sender = "" unless defined $sender;
+							$sender =~ s/^<//;
+							$sender =~ s/>$//;
+							$sender =~ s/\s*//g;
+							$sender = scalar getpwuid($<) unless length $sender;
+							my $mbox_message = $message;
+							$mbox_message =~ s/^(>*From )/>$1/mg;
+							DEBUG and warn "MBOX sender=$sender mbox_date=$mbox_date\n";
+							open my $mbox, '>>', "$dir/mbox"
+								or warn "Cannot open `$dir/mbox': $!";
+							if ($mbox) {
+								print $mbox "From $sender  $mbox_date\r\n$mbox_message\r\n\r\n";
+								close $mbox;
+							}
 						}
 						rename "$dir/lastuid.new", "$dir/lastuid";
 						$lastuid = $uid;
