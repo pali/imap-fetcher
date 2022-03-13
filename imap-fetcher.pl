@@ -10,6 +10,41 @@ use Time::Piece;
 
 use constant DEBUG => 0;
 
+if (defined $ARGV[0] and $ARGV[0] eq '-h') {
+	print <<"EOT";
+$0 - Fast fetch of all messages from IMAP mailbox
+
+Usage: $0 directory
+
+This tool incrementally fetch all messages from specified IMAP mailbox.
+Once there is no new message it waits in IMAP IDLE state. Information
+about the last downloaded message is stored in `directory/lastuid' file.
+If custom command is not specified then tool stores messages into mbox
+file `directory/mbox'. This tool uses mkdir-based lock and in case it
+is terminated abnormally it is required to remove `directory/lock`.
+
+Configuration is done via `directory/config' file. For example to fetch
+all messages from GMail account to mbox file use following options:
+
+server=imap.gmail.com
+port=993
+user=username\@gmail.com
+pass=password
+ssl=1
+folder_flag=\\All
+
+This is the fastest way how to incrementally download all messages from
+GMail account, with ability to interrupt and continue downloading process.
+
+IMAP mailbox folder may be specified also explicitly, instead of
+'folder_flag' use e.g. 'folder=INBOX'.
+
+To process fetched messages via custom command instead of storing them
+into mbox file, add config option 'command='.
+EOT
+	exit;
+}
+
 my $dir = $ARGV[0];
 die "Error: No target directory specified\n" unless defined $dir;
 die "Error: Target directory does not exist\n" unless -d $dir;
