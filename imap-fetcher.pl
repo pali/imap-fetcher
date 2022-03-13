@@ -44,6 +44,12 @@ while (<$fh>) {
 }
 close $fh;
 
+foreach (qw(server user pass)) {
+	die "Error: Missing option '$_' in config file `$dir/config'\n" unless defined $config{$_};
+}
+
+$config{port} = $config{ssl} ? 993 : 143 unless defined $config{port};
+
 LOGIN:
 if ($config{ssl}) {
 	$sock = IO::Socket::SSL->new(
