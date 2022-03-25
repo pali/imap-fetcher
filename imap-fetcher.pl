@@ -1,4 +1,5 @@
 #!/usr/bin/perl
+# (c) Pali 2018-2022, Perl license
 
 use strict;
 use warnings;
