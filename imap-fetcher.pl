@@ -7,6 +7,9 @@ use warnings;
 use IO::Handle;
 use IO::Socket::INET;
 use IO::Socket::SSL;
+use JSON::PP;
+use HTTP::Tiny;
+use MIME::Base64;
 use Time::Piece;
 
 use constant DEBUG => 0;
@@ -30,7 +33,10 @@ all messages from GMail account to mbox file use following options:
 server=imap.gmail.com
 port=993
 user=username\@gmail.com
-pass=password
+xoauth2_request_url=https://accounts.google.com/o/oauth2/token
+xoauth2_client_id=public_id
+xoauth2_client_secret=secret_key
+xoauth2_refresh_token=secret_token
 ssl=1
 folder_flag=\\All
 
@@ -39,6 +45,15 @@ GMail account, with ability to interrupt and continue downloading process.
 
 IMAP mailbox folder may be specified also explicitly, instead of
 'folder_flag' use e.g. 'folder=INBOX'.
+
+To fetch all messages from folder INBOX on myimapserver:
+
+server=myimapserver
+port=993
+user=username
+pass=password
+ssl=1
+folder=INBOX
 
 To process fetched messages via custom command instead of storing them
 into mbox file, add config option 'command='.
@@ -80,8 +95,18 @@ while (<$fh>) {
 }
 close $fh;
 
-foreach (qw(server user pass)) {
+foreach (qw(server user)) {
 	die "Error: Missing option '$_' in config file `$dir/config'\n" unless defined $config{$_};
+}
+
+if ((grep { defined $config{$_} } qw(pass xoauth2_request_url xoauth2_access_token)) != 1) {
+	die "Error: Exactly one option 'pass', 'xoauth2_request_url' or 'xoauth2_access_token' must be specified in config file `$dir/config'\n";
+}
+
+if (defined $config{xoauth2_request_url}) {
+	foreach (qw(xoauth2_client_id xoauth2_client_secret xoauth2_refresh_token)) {
+		die "Error: Missing option '$_' in config file `$dir/config'\n" unless defined $config{$_};
+	}
 }
 
 $config{port} = $config{ssl} ? 993 : 143 unless defined $config{port};
@@ -115,15 +140,77 @@ my $num = 1;
 my $done;
 
 my $has_gmail;
-print "Logging in...";
-STDOUT->flush();
-print $sock "$num LOGIN $config{user} $config{pass}\r\n";
+
+if (defined $config{xoauth2_request_url} or defined $config{xoauth2_access_token}) {
+	my $has_xoauth2;
+
+	print "Retrieving capabilities...";
+	STDOUT->flush();
+	print $sock "$num CAPABILITY\r\n";
+	$done = 0;
+	while (<$sock>) {
+		$_ =~ s/\r?\n$//;
+		DEBUG and warn "DEBUG: $_\n";
+		if ($_ =~ /^\*\s+CAPABILITY\b/) {
+			$has_gmail = ($_ =~ /\bX-GM-EXT-1\b/);
+			$has_xoauth2 = ($_ =~ /\bSASL-IR\b/ and $_ =~ /\bAUTH=XOAUTH2\b/);
+		} elsif ($_ =~ /^$num\b/) {
+			die "CAPABILITY failed: $_\n" if $_ !~ /^$num\s+OK\b/;
+			$done = 1;
+			last;
+		} elsif ($_ =~ /^\*\s+BYE\b/) {
+			die "CAPABILITY failed: $_\n";
+		}
+	}
+	die "CAPABILITY failed: Connection closed\n" unless $done;
+	$num++;
+	print " done\n";
+	die "Server does not support XOAUTH2\n" unless $has_xoauth2;
+
+	my $xoauth2_access_token;
+	if (defined $config{xoauth2_access_token}) {
+		$xoauth2_access_token = $config{xoauth2_access_token};
+	} else {
+		print "Requesting access token...";
+		STDOUT->flush();
+		my $http_response = HTTP::Tiny->new->post_form(
+			$config{xoauth2_request_url},
+			{
+				client_id => $config{xoauth2_client_id},
+				client_secret => $config{xoauth2_client_secret},
+				refresh_token => $config{xoauth2_refresh_token},
+				grant_type => 'refresh_token',
+			}
+		);
+		DEBUG and warn "DEBUG: $http_response->{status} $http_response->{reason}\n$http_response->{content}\n";
+		my $json_response = eval { decode_json($http_response->{content}) };
+		die "Access token request failed: " . ($http_response->{status} || '') . " " . ($http_response->{reason} || '') . "\n" unless defined $json_response;
+		die "Access token request failed: " . ($json_response->{error} || '') . " " . ($json_response->{error_description} || '') . "\n" if defined $json_response->{error} or defined $json_response->{error_description};
+		$xoauth2_access_token = $json_response->{access_token};
+		die "Access token request failed: Token is empty\n" unless defined $xoauth2_access_token and length $xoauth2_access_token;
+		print " done\n";
+	}
+
+	print "Authenticating...";
+	STDOUT->flush();
+	print $sock "$num AUTHENTICATE XOAUTH2 " . encode_base64("user=$config{user}\x01auth=Bearer $xoauth2_access_token\x01\x01", '') . "\r\n";
+} else {
+	print "Logging in...";
+	STDOUT->flush();
+	print $sock "$num LOGIN $config{user} $config{pass}\r\n";
+}
+
 $done = 0;
 while (<$sock>) {
 	$_ =~ s/\r?\n$//;
 	DEBUG and warn "DEBUG: $_\n";
 	if ($_ =~ /^\*\s+CAPABILITY\b/) {
 		$has_gmail = ($_ =~ /\bX-GM-EXT-1\b/);
+	} elsif ($_ =~ /^\+\s+(.*)/) {
+		my $note = eval { decode_base64($1) } || $1;
+		DEBUG and warn "DEBUG: $note\n";
+		my $status = eval { decode_json($note)->{status} };
+		die "Login failed: $note\n" if defined $status and $status =~ /^[45]/;
 	} elsif ($_ =~ /^$num\b/) {
 		die "Login failed: $_\n" if $_ !~ /^$num\s+OK\b/;
 		$done = 1;
