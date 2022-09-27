@@ -112,6 +112,8 @@ if (defined $config{xoauth2_request_url}) {
 $config{port} = $config{ssl} ? 993 : 143 unless defined $config{port};
 
 LOGIN:
+print "Connecting...";
+STDOUT->flush();
 if ($config{ssl}) {
 	$sock = IO::Socket::SSL->new(
 			PeerHost => $config{server},
@@ -135,6 +137,7 @@ if ($config{ssl}) {
 		goto LOGIN;
 	}
 }
+print " done\n";
 
 my $num = 1;
 my $done;
